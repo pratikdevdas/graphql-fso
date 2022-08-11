@@ -1,4 +1,4 @@
-const { ApolloServer, gql } = require("apollo-server");
+const { ApolloServer, gql, UserInputError } = require("apollo-server");
 const { v1: uuid } = require("uuid");
 
 let persons = [
@@ -26,10 +26,14 @@ let persons = [
 ];
 
 const typeDefs = gql`
-   type Address {
-    street:String!
-    city:String!
-   } 
+  enum YesNo {
+    YES
+    NO
+  }
+  type Address {
+    street: String!
+    city: String!
+  }
 
   type Person {
     name: String!
@@ -40,42 +44,57 @@ const typeDefs = gql`
 
   type Query {
     personCount: Int!
-    allPersons: [Person!]!
+    allPersons(phone: YesNo): [Person!]!
     findPerson(name: String!): Person
   }
 
-  type Mutation{
+  type Mutation {
     addPerson(
-        name: String!
-        phone: String!
-        street: String!
-        city: String!
-    ):Person
+      name: String!
+      phone: String!
+      street: String!
+      city: String!
+    ): Person
   }
 `;
 
 const resolvers = {
   Query: {
     personCount: () => persons.length,
-    allPersons: () => persons,
+    allPersons: (root, args) => {
+      if(!args.phone){
+        return persons
+      }
+      const byPhone = (person) => 
+      args.phone === 'YES' ? person.phone : !person.phone
+      return persons.filter(byPhone)
+
+    },
     findPerson: (root, args) => persons.find((p) => p.name === args.name),
   },
-  Person:{
+  
+  Person: {
     address: (root) => {
-        return {
-            street: root.street,
-            city: root.city
-        }
-    }
+      return {
+        street: root.street,
+        city: root.city,
+      };
+    },
   },
-  Mutation:{
-    addPerson: (root,args) => {
-        const person = {...args, id: uuid()}
-        console.log(args)
-        persons = persons.concat(person)
-        return person
-    }
-  }
+  Mutation: {
+    addPerson: (root, args) => {
+      // error handling
+      if (persons.find((p) => p.name === args.name)) {
+        throw new UserInputError("Name must be unique", {
+          invalidArgs: args.name,
+        });
+      }
+      const person = { ...args, id: uuid() };
+      console.log(args);
+      persons = persons.concat(person);
+      return person;
+    },
+  },
 };
 
 const server = new ApolloServer({
