@@ -11,7 +11,6 @@ let persons = [
   },
   {
     name: "Matti Luukkainen",
-    phone: "040-432342",
     street: "Malminkaari 10 A",
     city: "Helsinki",
     id: "3d599470-3436-11e9-bc57-8b80ba54c431",
@@ -26,10 +25,6 @@ let persons = [
 ];
 
 const typeDefs = gql`
-  enum YesNo {
-    YES
-    NO
-  }
   type Address {
     street: String!
     city: String!
@@ -42,12 +37,15 @@ const typeDefs = gql`
     id: ID!
   }
 
+  enum YesNo {
+    YES
+    NO
+  }
   type Query {
     personCount: Int!
     allPersons(phone: YesNo): [Person!]!
     findPerson(name: String!): Person
   }
-
   type Mutation {
     addPerson(
       name: String!
@@ -62,6 +60,7 @@ const resolvers = {
   Query: {
     personCount: () => persons.length,
     allPersons: (root, args) => {
+      console.log(args.phone)
       if(!args.phone){
         return persons
       }
@@ -72,7 +71,7 @@ const resolvers = {
     },
     findPerson: (root, args) => persons.find((p) => p.name === args.name),
   },
-  
+
   Person: {
     address: (root) => {
       return {
