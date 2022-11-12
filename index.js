@@ -1,30 +1,21 @@
+require('dotenv').config()
 const { ApolloServer, gql, UserInputError } = require("apollo-server");
 const { v1: uuid } = require("uuid");
+const mongoose = require('mongoose')
+const Person = require('./models/person')
 
-let persons = [
-  {
-    name: "Arto Hellas",
-    phone: "040-123543",
-    street: "Tapiolankatu 5 A",
-    city: "Espoo",
-    id: "3d594650-3436-11e9-bc57-8b80ba54c431",
-  },
-  {
-    name: "Matti Luukkainen",
-    street: "Malminkaari 10 A",
-    city: "Helsinki",
-    id: "3d599470-3436-11e9-bc57-8b80ba54c431",
-  },
-  {
-    name: "Venla Ruuska",
-    phone: "040-432342",
-    street: "Nallemäentie 22 C",
-    city: "Helsinki",
-    id: "3d599471-3436-11e9-bc57-8b80ba54c431",
-  },
-];
+mongoose.connect(process.env.MONGO_URL)
+  .then(() => {
+  console.log('connected to MongoDB')
+})
+.catch((error) => {
+  console.log('error connection to MongoDB:', error.message)
+})
+
+  
 
 const typeDefs = gql`
+
   type Address {
     street: String!
     city: String!
@@ -32,7 +23,7 @@ const typeDefs = gql`
 
   type Person {
     name: String!
-    phone: String!
+    phone: String
     address: Address!
     id: ID!
   }
@@ -41,11 +32,24 @@ const typeDefs = gql`
     YES
     NO
   }
+
+  type User {
+    username: String!
+    friends: [Person!]!
+    id: ID!
+  }
+
+  type Token {
+    value: String!
+  }
+
   type Query {
     personCount: Int!
     allPersons(phone: YesNo): [Person!]!
     findPerson(name: String!): Person
+    me: User
   }
+
   type Mutation {
     addPerson(
       name: String!
@@ -57,23 +61,23 @@ const typeDefs = gql`
       name: String!
       phone: String!
     ):Person
+    createUser(
+      username: String!
+    ):User
+    login(
+      username: String!
+      password: String!
+    ):Token
   }
 `;
 
 const resolvers = {
   Query: {
-    personCount: () => persons.length,
-    allPersons: (root, args) => {
-      console.log(args.phone)
-      if(!args.phone){
-        return persons
-      }
-      const byPhone = (person) => 
-      args.phone === 'YES' ? person.phone : !person.phone
-      return persons.filter(byPhone)
-
+    personCount: async () => Person.collection.countDocuments(),
+    allPersons: async (root, args) => {
+      return Person.find({})
     },
-    findPerson: (root, args) => persons.find((p) => p.name === args.name),
+    findPerson: async (root, args) => Person.findOne({ name: args.name }),
   },
 
   Person: {
@@ -82,30 +86,34 @@ const resolvers = {
         street: root.street,
         city: root.city,
       };
-    },
+    },  
   },
   Mutation: {
-    addPerson: (root, args) => {
+    addPerson: async(root, args) => {
       // error handling
-      if (persons.find((p) => p.name === args.name)) {
-        throw new UserInputError("Name must be unique", {
-          invalidArgs: args.name,
-        });
+      const person = new Person({ ...args })
+      try {
+        await person.save()
+      } catch (error) {
+        throw new UserInputError(error.message, {
+          invalidArgs: args,
+        })
       }
-      const person = { ...args, id: uuid() };
-      console.log(args);
-      persons = persons.concat(person);
       return person;
     },
-    editNumber: (root, args) => {
-      const person = persons.find(p => p.name === args.name)
-      if(!person){
-        return null
+    editNumber: async(root, args) => {
+      const person = await Person.findOne({ name: args.name})
+      person.phone = args.phone
+
+      try {
+        await person.save()
+      } catch (error) {
+        throw new UserInputError(error.message, {
+          invalidArgs: args,
+        })
       }
 
-      const updatedPerson = {...person, phone: args.phone}
-      persons = persons.map(p => p.name === args.name ? updatedPerson : p)
-      return updatedPerson
+      return person
     }
   },
 };
